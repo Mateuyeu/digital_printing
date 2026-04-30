@@ -45,6 +45,11 @@ $COMPOSE_BIN -f docker-compose.yml build orchestrator
 $COMPOSE_BIN -f docker-compose.yml --profile build build scanner-projectdiscovery scanner-theharvester
 ok "Images orchestrator + scanners construites"
 
+if [ "$MODE" = "drps" ] || [ "$MODE" = "all" ]; then
+  $COMPOSE_BIN -f docker-compose.yml -f docker-compose.drps.yml build lacus
+  ok "Image LACUS construite"
+fi
+
 if [ "$MODE" = "build-only" ]; then
   ok "Mode build-only - termine"
   exit 0

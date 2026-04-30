@@ -32,6 +32,7 @@ setup:
 build:
 	$(COMPOSE) $(COMPOSE_CORE) build orchestrator
 	$(COMPOSE) $(COMPOSE_CORE) --profile build build scanner-projectdiscovery scanner-theharvester
+	$(COMPOSE) $(COMPOSE_DRPS) build lacus
 
 up-core:
 	$(COMPOSE) $(COMPOSE_CORE) up -d
@@ -66,4 +67,5 @@ clean:
 nuke: clean
 	docker rmi -f digital_printing/orchestrator:latest \
 	             digital_printing/projectdiscovery:latest \
-	             digital_printing/theharvester:latest 2>/dev/null || true
+	             digital_printing/theharvester:latest \
+	             digital_printing/lacus:latest 2>/dev/null || true

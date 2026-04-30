@@ -34,12 +34,12 @@ check_http "SpiderFoot"        "http://localhost:5001/"
 check_http "TheHive"           "http://localhost:9000/api/v1/status"
 check_http "Cortex"            "http://localhost:9001/api/status"
 check_http "MISP"              "https://localhost:8443/users/login"
-check_http "AIL Framework"     "https://localhost:7000/"
 check_http "LACUS"             "http://localhost:7100/"
+check_http "AIL Framework"     "https://localhost:7000/"
 
 printf '\n\033[1m== Integrations (via orchestrator) ==\033[0m\n\n'
-curl -ksS -u "${ORCH_USER}:${ORCH_PWD}" \
+curl -ksS --max-time 60 -u "${ORCH_USER}:${ORCH_PWD}" \
      "http://localhost:${ORCH_PORT}/api/v1/integrations/health" 2>/dev/null \
   | python3 -m json.tool 2>/dev/null \
-  || echo "  (orchestrator non joignable)"
+  || echo "  (orchestrator non joignable ou check timeout)"
 echo

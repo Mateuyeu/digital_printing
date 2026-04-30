@@ -1,5 +1,12 @@
 # =============================================================================
-# DRPS stack: SpiderFoot, AIL Framework, LACUS, Tor proxy
+# DRPS stack - SpiderFoot + Tor + (optionnel: LACUS via build local)
+#
+# AIL Framework n'est PAS inclus ici : son installation requiert kvrocks +
+# plusieurs services Python en parallele, peu adapte a un simple compose.
+# Deployer AIL sur une VM dediee en suivant l'install officielle :
+#   https://github.com/ail-project/ail-framework/blob/master/HOWTO.md
+# Puis renseigner AIL_URL et AIL_API_KEY dans .env.
+#
 # Use with: docker compose -f docker-compose.yml -f docker-compose.drps.yml up -d
 # =============================================================================
 
@@ -7,7 +14,6 @@ name: digital_printing
 
 volumes:
   spiderfoot_data:
-  ail_data:
   lacus_redis_data:
   tor_data:
 
@@ -15,16 +21,13 @@ services:
 
   # ---------------------------------------------------------------------------
   # SpiderFoot - OSINT & EASM (web UI + API)
+  # Image officielle Docker Hub
   # ---------------------------------------------------------------------------
   spiderfoot:
-    image: ghcr.io/smicallef/spiderfoot:latest
+    image: smicallef/spiderfoot:latest
     restart: unless-stopped
-    environment:
-      SPIDERFOOT_USER: ${SPIDERFOOT_USER:-spiderfoot}
-      SPIDERFOOT_PASSWORD: ${SPIDERFOOT_PASSWORD:-change_me_sf_password}
     volumes:
       - spiderfoot_data:/home/spiderfoot/.spiderfoot
-      - ./config/spiderfoot/spiderfoot.cfg:/home/spiderfoot/.spiderfoot/spiderfoot.cfg:ro
     command: ["-l", "0.0.0.0:5001"]
     ports:
       - "5001:5001"
@@ -51,8 +54,8 @@ services:
       retries: 5
 
   # ---------------------------------------------------------------------------
-  # LACUS - capturing engine (Playwright + Tor + I2P)
-  # https://github.com/ail-project/lacus
+  # LACUS - capturing engine (Playwright + Tor)
+  # Build from source : pas d'image officielle publiee
   # ---------------------------------------------------------------------------
   lacus-redis:
     image: redis:7-alpine
@@ -64,7 +67,9 @@ services:
       - dp_drps
 
   lacus:
-    image: ghcr.io/ail-project/lacus:latest
+    image: digital_printing/lacus:latest
+    build:
+      context: ./services/lacus
     restart: unless-stopped
     depends_on:
       - lacus-redis
@@ -86,32 +91,4 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-      start_period: 60s
-
-  # ---------------------------------------------------------------------------
-  # AIL Framework - analyse des fuites/leaks (paste, social, forums)
-  # https://github.com/ail-project/ail-framework
-  # ---------------------------------------------------------------------------
-  ail:
-    image: ghcr.io/ail-project/ail-framework:latest
-    restart: unless-stopped
-    depends_on:
-      - lacus
-    environment:
-      AIL_HOME: /opt/ail
-      AIL_LACUS_URL: http://lacus:7100
-      AIL_BIND: 0.0.0.0
-    volumes:
-      - ail_data:/opt/ail/PASTES
-      - ./config/ail/core.cfg:/opt/ail/configs/core.cfg:ro
-    ports:
-      - "7000:7000"
-    networks:
-      - dp_drps
-      - dp_core
-    healthcheck:
-      test: ["CMD-SHELL", "curl -kfsS https://localhost:7000/ || exit 1"]
-      interval: 60s
-      timeout: 15s
-      retries: 10
-      start_period: 180s
+      start_period: 120s
