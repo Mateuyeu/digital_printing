@@ -3,23 +3,17 @@
 # Lance un scan pour un client
 # Usage:
 #   ./scripts/run-scan.sh <slug> <kind> [--push-thehive] [--push-misp] [params-json]
-#
-#   kind = full_recon | easm_discovery | easm_http | easm_vuln | easm_crawl
-#        | easm_cve | easm_osint | drps_leaks | drps_ail | drps_darkweb | drps_social
-#
-# Exemples :
-#   ./scripts/run-scan.sh acme full_recon --push-thehive --push-misp
-#   ./scripts/run-scan.sh acme easm_cve '{"products":["wordpress","apache"]}'
-#   ./scripts/run-scan.sh acme drps_darkweb '{"urls":["http://exampleonion.onion"], "proxy":"tor"}'
 # =============================================================================
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-[ -f .env ] && set -a && . ./.env && set +a
+. "$ROOT/scripts/_lib.sh"
 
-API="http://localhost:${ORCHESTRATOR_PORT:-8080}/api/v1"
-AUTH="-u ${ORCHESTRATOR_ADMIN_USER:-admin}:${ORCHESTRATOR_ADMIN_PASSWORD:-admin}"
+ORCH_PORT="$(env_get ORCHESTRATOR_PORT 8080)"
+ORCH_USER="$(env_get ORCHESTRATOR_ADMIN_USER admin)"
+ORCH_PWD="$(env_get  ORCHESTRATOR_ADMIN_PASSWORD admin)"
+API="http://localhost:${ORCH_PORT}/api/v1"
 
 [ "$#" -lt 2 ] && {
   echo "Usage: $0 <slug> <kind> [--push-thehive] [--push-misp] [params-json]"; exit 1; }
@@ -38,17 +32,17 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-# Merge auto-push flags
-PARAMS=$(python3 -c "
-import json, sys
-p = json.loads('''$PARAMS''')
-if '$PUSH_TH'   == 'true': p['auto_push_thehive'] = True
-if '$PUSH_MISP' == 'true': p['auto_push_misp']    = True
+PARAMS=$(PARAMS_JSON="$PARAMS" PUSH_TH="$PUSH_TH" PUSH_MISP="$PUSH_MISP" python3 - <<'PY'
+import json, os
+p = json.loads(os.environ["PARAMS_JSON"])
+if os.environ["PUSH_TH"]   == "true": p["auto_push_thehive"] = True
+if os.environ["PUSH_MISP"] == "true": p["auto_push_misp"]    = True
 print(json.dumps(p))
-")
+PY
+)
 
 PAYLOAD="{\"kind\":\"$KIND\",\"parameters\":$PARAMS}"
 echo ">> POST $API/clients/$SLUG/scans"
 echo ">> $PAYLOAD"
-curl -fsS $AUTH -X POST -H "Content-Type: application/json" \
+curl -fsS -u "${ORCH_USER}:${ORCH_PWD}" -X POST -H "Content-Type: application/json" \
   "$API/clients/$SLUG/scans" -d "$PAYLOAD" | python3 -m json.tool

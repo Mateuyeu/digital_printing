@@ -3,21 +3,21 @@
 # Cree un client (tenant) et ajoute ses scopes
 # Usage:
 #   ./scripts/add-client.sh <slug> <nom> [contact_email]
-#   ./scripts/add-client.sh acme "ACME Corp" contact@acme.com
-#
-# Une fois le client cree, ajouter ses scopes :
-#   ./scripts/add-client.sh acme --add-scope domain acme.com
-#   ./scripts/add-client.sh acme --add-scope ip 198.51.100.10
-#   ./scripts/add-client.sh acme --add-scope keyword "ACME"
+#   ./scripts/add-client.sh <slug> --add-scope <kind> <value> [note]
+#   ./scripts/add-client.sh <slug> --list-scopes
+#   ./scripts/add-client.sh <slug> --del-scope <id>
+#   ./scripts/add-client.sh --list
 # =============================================================================
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-[ -f .env ] && set -a && . ./.env && set +a
+. "$ROOT/scripts/_lib.sh"
 
-API="http://localhost:${ORCHESTRATOR_PORT:-8080}/api/v1"
-AUTH="-u ${ORCHESTRATOR_ADMIN_USER:-admin}:${ORCHESTRATOR_ADMIN_PASSWORD:-admin}"
+ORCH_PORT="$(env_get ORCHESTRATOR_PORT 8080)"
+ORCH_USER="$(env_get ORCHESTRATOR_ADMIN_USER admin)"
+ORCH_PWD="$(env_get  ORCHESTRATOR_ADMIN_PASSWORD admin)"
+API="http://localhost:${ORCH_PORT}/api/v1"
 
 usage() {
   cat <<EOF
@@ -37,7 +37,7 @@ EOF
 [ "$#" -lt 1 ] && usage
 
 if [ "$1" = "--list" ]; then
-  curl -fsS $AUTH "$API/clients" | python3 -m json.tool
+  curl -fsS -u "${ORCH_USER}:${ORCH_PWD}" "$API/clients" | python3 -m json.tool
   exit 0
 fi
 
@@ -47,23 +47,23 @@ case "${1:-}" in
   --add-scope)
     [ "$#" -lt 3 ] && usage
     KIND="$2"; VALUE="$3"; NOTE="${4:-}"
-    curl -fsS $AUTH -X POST -H "Content-Type: application/json" \
+    curl -fsS -u "${ORCH_USER}:${ORCH_PWD}" -X POST -H "Content-Type: application/json" \
       "$API/clients/$SLUG/scopes" \
       -d "{\"kind\":\"$KIND\",\"value\":\"$VALUE\",\"note\":\"$NOTE\"}" \
       | python3 -m json.tool
     ;;
   --list-scopes)
-    curl -fsS $AUTH "$API/clients/$SLUG/scopes" | python3 -m json.tool
+    curl -fsS -u "${ORCH_USER}:${ORCH_PWD}" "$API/clients/$SLUG/scopes" | python3 -m json.tool
     ;;
   --del-scope)
     [ "$#" -lt 2 ] && usage
-    curl -fsS $AUTH -X DELETE "$API/clients/$SLUG/scopes/$2"
+    curl -fsS -u "${ORCH_USER}:${ORCH_PWD}" -X DELETE "$API/clients/$SLUG/scopes/$2"
     echo "deleted scope $2"
     ;;
   *)
     NAME="${1:-}"; CONTACT="${2:-}"
     [ -z "$NAME" ] && usage
-    curl -fsS $AUTH -X POST -H "Content-Type: application/json" \
+    curl -fsS -u "${ORCH_USER}:${ORCH_PWD}" -X POST -H "Content-Type: application/json" \
       "$API/clients" \
       -d "{\"slug\":\"$SLUG\",\"name\":\"$NAME\",\"contact_email\":\"$CONTACT\"}" \
       | python3 -m json.tool

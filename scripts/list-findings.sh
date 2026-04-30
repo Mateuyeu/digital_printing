@@ -3,24 +3,24 @@
 # Liste les findings d'un client (filtrable)
 # Usage:
 #   ./scripts/list-findings.sh <slug> [severity] [kind]
-#   ./scripts/list-findings.sh acme critical
-#   ./scripts/list-findings.sh acme high vulnerability
 # =============================================================================
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-[ -f .env ] && set -a && . ./.env && set +a
+. "$ROOT/scripts/_lib.sh"
 
-API="http://localhost:${ORCHESTRATOR_PORT:-8080}/api/v1"
-AUTH="-u ${ORCHESTRATOR_ADMIN_USER:-admin}:${ORCHESTRATOR_ADMIN_PASSWORD:-admin}"
+ORCH_PORT="$(env_get ORCHESTRATOR_PORT 8080)"
+ORCH_USER="$(env_get ORCHESTRATOR_ADMIN_USER admin)"
+ORCH_PWD="$(env_get  ORCHESTRATOR_ADMIN_PASSWORD admin)"
+API="http://localhost:${ORCH_PORT}/api/v1"
 
 SLUG="${1:?slug requis}"
 QUERY=""
 [ -n "${2:-}" ] && QUERY="severity=$2"
 [ -n "${3:-}" ] && QUERY="${QUERY:+$QUERY&}kind=$3"
 
-curl -fsS $AUTH "$API/clients/$SLUG/findings${QUERY:+?$QUERY}" \
+curl -fsS -u "${ORCH_USER}:${ORCH_PWD}" "$API/clients/$SLUG/findings${QUERY:+?$QUERY}" \
   | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
