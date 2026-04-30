@@ -3,7 +3,7 @@
 # Contient: httpx, nuclei, naabu, katana, cvemap, subfinder, dnsx
 # Base debian (et non alpine) car certaines deps PD ont des soucis avec musl.
 # =============================================================================
-FROM golang:1.22-bookworm AS builder
+FROM golang:1.24-bookworm AS builder
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
