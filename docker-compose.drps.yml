@@ -21,14 +21,15 @@ services:
 
   # ---------------------------------------------------------------------------
   # SpiderFoot - OSINT & EASM (web UI + API)
-  # Image officielle Docker Hub
+  # Build from source : pas d'image officielle reliable sur les registries
   # ---------------------------------------------------------------------------
   spiderfoot:
-    image: smicallef/spiderfoot:latest
+    image: digital_printing/spiderfoot:latest
+    build:
+      context: ./services/spiderfoot
     restart: unless-stopped
     volumes:
       - spiderfoot_data:/home/spiderfoot/.spiderfoot
-    command: ["-l", "0.0.0.0:5001"]
     ports:
       - "5001:5001"
     networks:

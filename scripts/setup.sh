@@ -46,8 +46,8 @@ $COMPOSE_BIN -f docker-compose.yml --profile build build scanner-projectdiscover
 ok "Images orchestrator + scanners construites"
 
 if [ "$MODE" = "drps" ] || [ "$MODE" = "all" ]; then
-  $COMPOSE_BIN -f docker-compose.yml -f docker-compose.drps.yml build lacus
-  ok "Image LACUS construite"
+  $COMPOSE_BIN -f docker-compose.yml -f docker-compose.drps.yml build lacus spiderfoot
+  ok "Images LACUS + SpiderFoot construites"
 fi
 
 if [ "$MODE" = "build-only" ]; then
