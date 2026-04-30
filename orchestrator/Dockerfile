@@ -5,19 +5,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PYTHONPATH=/app
 
+# WeasyPrint a besoin de cairo/pango/gdk-pixbuf/ffi pour le rendu PDF.
+# Pas besoin de docker-ce-cli : la lib Python `docker` parle au socket directement.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
-        gnupg \
-        wkhtmltopdf \
+        libcairo2 \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
+        libgdk-pixbuf-2.0-0 \
+        libffi8 \
+        shared-mime-info \
         fonts-dejavu-core \
         fonts-liberation \
- && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker.gpg \
- && echo "deb [signed-by=/usr/share/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" \
-        > /etc/apt/sources.list.d/docker.list \
- && apt-get update \
- && apt-get install -y --no-install-recommends docker-ce-cli \
+        fonts-noto-core \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -152,21 +152,11 @@ def _render_html(ctx: dict) -> str:
 
 def _render_pdf(html_path: Path, pdf_path: Path) -> bool:
     try:
-        import pdfkit
-        pdfkit.from_file(str(html_path), str(pdf_path), options={
-            "page-size": "A4",
-            "margin-top": "12mm", "margin-bottom": "12mm",
-            "margin-left": "10mm", "margin-right": "10mm",
-            "encoding": "UTF-8",
-            "enable-local-file-access": "",
-            "print-media-type": "",
-            "footer-right": "Page [page] / [topage]",
-            "footer-font-size": "8",
-            "quiet": "",
-        })
+        from weasyprint import HTML
+        HTML(filename=str(html_path)).write_pdf(str(pdf_path))
         return True
     except Exception as e:
-        log.warning("pdfkit failed (wkhtmltopdf?): %s", e)
+        log.warning("weasyprint failed: %s", e)
         return False
 
 
