@@ -1,0 +1,221 @@
+# =============================================================================
+# Core stack: orchestrator + state DB + scanner workers
+# Use with: docker compose up -d
+# Stack peut etre etendu avec docker-compose.soar.yml et docker-compose.drps.yml
+# =============================================================================
+
+name: digital_printing
+
+x-common-env: &common-env
+  TZ: ${TZ:-Europe/Paris}
+
+networks:
+  dp_core:
+    name: dp_core
+    driver: bridge
+  dp_soar:
+    name: dp_soar
+    driver: bridge
+  dp_drps:
+    name: dp_drps
+    driver: bridge
+
+volumes:
+  pg_data:
+  redis_data:
+  scanner_cache:
+  nuclei_templates:
+  report_data:
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # State database (clients, scopes, scans, findings, audit)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      POSTGRES_USER: ${POSTGRES_USER:-dp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_pg_password}
+      POSTGRES_DB: ${POSTGRES_DB:-digital_printing}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - dp_core
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dp} -d ${POSTGRES_DB:-digital_printing}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Celery broker + cache
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - dp_core
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Orchestrator API (FastAPI) - point central, multi-tenant
+  # ---------------------------------------------------------------------------
+  orchestrator:
+    build:
+      context: ./orchestrator
+    image: digital_printing/orchestrator:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *common-env
+      ORCHESTRATOR_SECRET_KEY: ${ORCHESTRATOR_SECRET_KEY}
+      ORCHESTRATOR_ADMIN_USER: ${ORCHESTRATOR_ADMIN_USER:-admin}
+      ORCHESTRATOR_ADMIN_PASSWORD: ${ORCHESTRATOR_ADMIN_PASSWORD}
+      ORCHESTRATOR_LOG_LEVEL: ${ORCHESTRATOR_LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-dp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-digital_printing}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      THEHIVE_URL: ${THEHIVE_URL}
+      THEHIVE_API_KEY: ${THEHIVE_API_KEY}
+      THEHIVE_ORG: ${THEHIVE_ORG:-digital-printing}
+      CORTEX_URL: ${CORTEX_URL}
+      CORTEX_API_KEY: ${CORTEX_API_KEY}
+      MISP_URL: ${MISP_URL}
+      MISP_API_KEY: ${MISP_API_KEY}
+      MISP_VERIFY_SSL: ${MISP_VERIFY_SSL:-false}
+      SPIDERFOOT_URL: ${SPIDERFOOT_URL}
+      SPIDERFOOT_USER: ${SPIDERFOOT_USER:-spiderfoot}
+      SPIDERFOOT_PASSWORD: ${SPIDERFOOT_PASSWORD}
+      AIL_URL: ${AIL_URL}
+      AIL_API_KEY: ${AIL_API_KEY}
+      AIL_VERIFY_SSL: ${AIL_VERIFY_SSL:-false}
+      LACUS_URL: ${LACUS_URL}
+      INTELX_API_KEY: ${INTELX_API_KEY}
+      INTELX_BASE_URL: ${INTELX_BASE_URL:-https://2.intelx.io}
+      DEHASHED_EMAIL: ${DEHASHED_EMAIL}
+      DEHASHED_API_KEY: ${DEHASHED_API_KEY}
+      REPORT_OUTPUT_DIR: /data/reports
+      REPORT_BRAND_NAME: ${REPORT_BRAND_NAME:-Digital Printing MSSP}
+    ports:
+      - "${ORCHESTRATOR_PORT:-8080}:8080"
+    volumes:
+      - report_data:/data/reports
+      - ./reports/output:/data/reports/output
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - dp_core
+      - dp_soar
+      - dp_drps
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Celery worker - execute les jobs de scan EASM/DRPS
+  # ---------------------------------------------------------------------------
+  worker:
+    image: digital_printing/orchestrator:latest
+    build:
+      context: ./orchestrator
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      orchestrator:
+        condition: service_started
+    command: ["celery", "-A", "app.workers.tasks", "worker", "-l", "INFO", "-Q", "easm,drps,reports", "-c", "4"]
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-dp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-digital_printing}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      THEHIVE_URL: ${THEHIVE_URL}
+      THEHIVE_API_KEY: ${THEHIVE_API_KEY}
+      THEHIVE_ORG: ${THEHIVE_ORG:-digital-printing}
+      CORTEX_URL: ${CORTEX_URL}
+      CORTEX_API_KEY: ${CORTEX_API_KEY}
+      MISP_URL: ${MISP_URL}
+      MISP_API_KEY: ${MISP_API_KEY}
+      MISP_VERIFY_SSL: ${MISP_VERIFY_SSL:-false}
+      SPIDERFOOT_URL: ${SPIDERFOOT_URL}
+      SPIDERFOOT_USER: ${SPIDERFOOT_USER:-spiderfoot}
+      SPIDERFOOT_PASSWORD: ${SPIDERFOOT_PASSWORD}
+      AIL_URL: ${AIL_URL}
+      AIL_API_KEY: ${AIL_API_KEY}
+      LACUS_URL: ${LACUS_URL}
+      INTELX_API_KEY: ${INTELX_API_KEY}
+      INTELX_BASE_URL: ${INTELX_BASE_URL:-https://2.intelx.io}
+      DEHASHED_EMAIL: ${DEHASHED_EMAIL}
+      DEHASHED_API_KEY: ${DEHASHED_API_KEY}
+      SCANNER_PD_IMAGE: digital_printing/projectdiscovery:latest
+      SCANNER_HARVESTER_IMAGE: digital_printing/theharvester:latest
+      REPORT_OUTPUT_DIR: /data/reports
+    volumes:
+      - scanner_cache:/scanner_cache
+      - nuclei_templates:/root/nuclei-templates
+      - report_data:/data/reports
+      - ./reports/output:/data/reports/output
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - dp_core
+      - dp_soar
+      - dp_drps
+
+  # ---------------------------------------------------------------------------
+  # Scheduler Celery - lancements recurrents (recon hebdo, monitoring DRPS)
+  # ---------------------------------------------------------------------------
+  beat:
+    image: digital_printing/orchestrator:latest
+    build:
+      context: ./orchestrator
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - orchestrator
+    command: ["celery", "-A", "app.workers.tasks", "beat", "-l", "INFO", "--schedule=/tmp/celerybeat-schedule"]
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-dp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-digital_printing}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    networks:
+      - dp_core
+
+  # ---------------------------------------------------------------------------
+  # Scanner image builder - build only, do not run
+  # On utilise "profiles: [build]" pour construire les images sans les demarrer
+  # ---------------------------------------------------------------------------
+  scanner-projectdiscovery:
+    image: digital_printing/projectdiscovery:latest
+    build:
+      context: ./scanners/projectdiscovery
+    profiles: ["build"]
+    command: ["true"]
+
+  scanner-theharvester:
+    image: digital_printing/theharvester:latest
+    build:
+      context: ./scanners/theharvester
+    profiles: ["build"]
+    command: ["true"]

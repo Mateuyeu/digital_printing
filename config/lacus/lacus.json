@@ -1,0 +1,12 @@
+{
+  "loglevel": "INFO",
+  "only_global_lookups": false,
+  "tor_proxy_url": "socks5://tor:9050",
+  "i2p_proxy_url": "",
+  "default_user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+  "max_capture_time": 300,
+  "max_capture_depth": 2,
+  "wait_in_seconds": 5,
+  "concurrent_captures": 4,
+  "global_max_results": 1000
+}

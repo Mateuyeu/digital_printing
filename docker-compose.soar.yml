@@ -1,0 +1,219 @@
+# =============================================================================
+# SOAR stack: TheHive 5, Cortex, MISP
+# Use with: docker compose -f docker-compose.yml -f docker-compose.soar.yml up -d
+# =============================================================================
+
+name: digital_printing
+
+volumes:
+  cassandra_data:
+  elasticsearch_data:
+  thehive_data:
+  cortex_data:
+  cortex_jobs:
+  misp_db:
+  misp_files:
+  misp_config:
+  misp_logs:
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Cassandra (TheHive backend)
+  # ---------------------------------------------------------------------------
+  cassandra:
+    image: cassandra:4.1
+    restart: unless-stopped
+    environment:
+      CASSANDRA_CLUSTER_NAME: thehive
+      MAX_HEAP_SIZE: 1G
+      HEAP_NEWSIZE: 256M
+      CASSANDRA_DC: dc1
+      CASSANDRA_RACK: rack1
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    networks:
+      - dp_soar
+    healthcheck:
+      test: ["CMD-SHELL", "nodetool status | grep -E '^UN'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # Elasticsearch (Cortex + TheHive index)
+  # ---------------------------------------------------------------------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.27
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      cluster.name: hive
+      thread_pool.search.queue_size: 100000
+      thread_pool.write.queue_size: 10000
+      bootstrap.memory_lock: "true"
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+      xpack.security.enabled: "false"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - dp_soar
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # TheHive 5 (case management, alertes EASM/DRPS)
+  # ---------------------------------------------------------------------------
+  thehive:
+    image: strangebee/thehive:5.4
+    restart: unless-stopped
+    depends_on:
+      cassandra:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      JVM_OPTS: "-Xms1g -Xmx2g"
+    command:
+      - --secret
+      - "${THEHIVE_SECRET:-change_me_thehive_secret_key_must_be_long_enough}"
+      - --cql-hostnames
+      - cassandra
+      - --index-backend
+      - elasticsearch
+      - --es-hostnames
+      - elasticsearch
+      - --s3-endpoint
+      - ""
+      - --cortex-hostnames
+      - cortex
+      - --cortex-keys
+      - "${CORTEX_API_KEY:-change_me_cortex_apikey}"
+      - --cortex-port
+      - "9001"
+      - --no-config-cortex
+    volumes:
+      - thehive_data:/etc/thehive/application.conf.d
+      - ./config/thehive:/etc/thehive/conf.d:ro
+    ports:
+      - "9000:9000"
+    networks:
+      - dp_soar
+      - dp_core
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/api/v1/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  # ---------------------------------------------------------------------------
+  # Cortex (analyzers + responders)
+  # ---------------------------------------------------------------------------
+  cortex:
+    image: thehiveproject/cortex:3.1.8
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      JVM_OPTS: "-Xms512m -Xmx1g"
+      job_directory: /tmp/cortex-jobs
+    command:
+      - --job-directory
+      - /tmp/cortex-jobs
+    volumes:
+      - cortex_data:/data
+      - cortex_jobs:/tmp/cortex-jobs
+      - ./config/cortex:/etc/cortex:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "9001:9001"
+    networks:
+      - dp_soar
+      - dp_core
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9001/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # MISP (IOC sharing)
+  # ---------------------------------------------------------------------------
+  misp-db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MISP_MYSQL_PASSWORD:-change_me_misp_mysql}
+      MYSQL_DATABASE: misp
+      MYSQL_USER: misp
+      MYSQL_PASSWORD: ${MISP_MYSQL_PASSWORD:-change_me_misp_mysql}
+    command:
+      - --innodb-buffer-pool-size=512M
+      - --innodb-change-buffering=none
+      - --innodb-io-capacity=1000
+      - --innodb-log-file-size=600M
+    volumes:
+      - misp_db:/var/lib/mysql
+    networks:
+      - dp_soar
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -p${MISP_MYSQL_PASSWORD:-change_me_misp_mysql} || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  misp-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - dp_soar
+
+  misp:
+    image: ghcr.io/misp/misp-docker/misp-core:latest
+    restart: unless-stopped
+    depends_on:
+      misp-db:
+        condition: service_healthy
+      misp-redis:
+        condition: service_started
+    environment:
+      BASE_URL: ${MISP_BASEURL:-https://misp.local}
+      MYSQL_HOST: misp-db
+      MYSQL_USER: misp
+      MYSQL_PASSWORD: ${MISP_MYSQL_PASSWORD:-change_me_misp_mysql}
+      MYSQL_DATABASE: misp
+      REDIS_FQDN: misp-redis
+      ADMIN_EMAIL: ${MISP_ADMIN_EMAIL:-admin@digital-printing.local}
+      ADMIN_PASSWORD: ${MISP_ADMIN_PASSPHRASE:-change_me_misp_admin}
+      ADMIN_KEY: ${MISP_API_KEY:-change_me_misp_apikey}
+      ADMIN_ORG: DIGITAL-PRINTING
+      DISABLE_IPV6: "true"
+      DISABLE_SSL_REDIRECT: "true"
+    volumes:
+      - misp_files:/var/www/MISP/app/files
+      - misp_config:/var/www/MISP/app/Config
+      - misp_logs:/var/www/MISP/app/tmp/logs
+    ports:
+      - "8443:443"
+      - "8088:80"
+    networks:
+      - dp_soar
+      - dp_core
+    healthcheck:
+      test: ["CMD-SHELL", "curl -kfsS https://localhost/users/login || exit 1"]
+      interval: 60s
+      timeout: 15s
+      retries: 10
+      start_period: 180s

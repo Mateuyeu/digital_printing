@@ -1,0 +1,27 @@
+# Templates Nuclei activates par defaut pour le scan EASM
+# Les workflows (-w) ciblent des stacks complets (ex: cms, java)
+# Adapter selon les techs detectees par httpx
+
+# Severity-based
+http/cves
+http/exposures
+http/misconfiguration
+http/vulnerabilities
+http/default-logins
+http/takeovers
+
+# CMS / framework specifiques
+http/cms/wordpress
+http/technologies
+
+# Network
+network/cves
+network/misconfig
+network/exposures
+
+# DNS
+dns/cves
+dns/misconfig
+
+# SSL
+ssl

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>{{ title }}</title>
+<style>
+  @page { size: A4; margin: 18mm 14mm; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1f2937; font-size: 11pt; line-height: 1.4; margin: 0; }
+  h1 { font-size: 28pt; margin: 0 0 8px 0; color: #111827; letter-spacing: -0.5px; }
+  h2 { font-size: 16pt; margin: 24px 0 8px 0; color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 4px; }
+  h3 { font-size: 12pt; margin: 14px 0 4px 0; color: #1f2937; }
+  .cover { padding: 30mm 0 20mm 0; text-align: center; page-break-after: always; }
+  .cover .brand { font-size: 14pt; color: #6b7280; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 30mm; }
+  .cover h1 { font-size: 36pt; }
+  .cover .client { font-size: 22pt; margin: 12px 0; color: #2563eb; }
+  .cover .meta { color: #6b7280; margin-top: 30mm; font-size: 10pt; }
+  .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+  .stat { border: 1px solid #e5e7eb; border-radius: 4px; padding: 10px; text-align: center; background: #f9fafb; }
+  .stat .num { font-size: 20pt; font-weight: 700; color: #111827; }
+  .stat .lbl { font-size: 9pt; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+  .sev-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 8px 0; }
+  .sev { border-radius: 4px; padding: 8px; text-align: center; color: white; font-weight: 600; }
+  .sev .num { font-size: 18pt; }
+  .sev .lbl { font-size: 8pt; text-transform: uppercase; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 9.5pt; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+  th { background: #f3f4f6; font-weight: 600; color: #374151; text-transform: uppercase; font-size: 8pt; letter-spacing: 0.5px; }
+  tr:nth-child(even) td { background: #fafbfc; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 8pt; color: white; font-weight: 600; text-transform: uppercase; }
+  .scope-list { columns: 2; column-gap: 16px; }
+  .scope-item { break-inside: avoid; margin-bottom: 4px; font-family: 'Courier New', monospace; font-size: 9pt; }
+  .scope-kind { color: #2563eb; font-weight: 600; margin-right: 8px; }
+  .ioc-table { font-family: 'Courier New', monospace; font-size: 8.5pt; }
+  .footer-note { font-size: 8pt; color: #6b7280; margin-top: 16px; text-align: center; font-style: italic; }
+  ul.scans { padding-left: 18px; }
+  ul.scans li { margin-bottom: 4px; }
+  .badge-ok { color: #059669; font-weight: 600; }
+  .badge-fail { color: #dc2626; font-weight: 600; }
+  .badge-running { color: #f59e0b; font-weight: 600; }
+  .desc { color: #6b7280; font-size: 9pt; }
+  hr { border: none; border-top: 1px solid #e5e7eb; margin: 16px 0; }
+  .page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<!-- ==== Cover ==== -->
+<section class="cover">
+  <div class="brand">{{ brand }}</div>
+  <h1>EASM &amp; DRPS Report</h1>
+  <div class="client">{{ client.name }}</div>
+  <div class="desc">{{ client.description }}</div>
+  <div class="meta">
+    Période d'analyse&nbsp;: <strong>{{ period.start }} → {{ period.end }}</strong><br>
+    ({{ period.days }} jours)<br><br>
+    Document généré le {{ generated_at }}<br>
+    Classification&nbsp;: <strong>TLP:AMBER</strong>
+  </div>
+</section>
+
+<!-- ==== Executive summary ==== -->
+<section>
+  <h2>Synthèse exécutive</h2>
+  <p>
+    Ce rapport présente la cartographie de la surface d'attaque externe (EASM) et
+    le suivi des risques numériques (DRPS) du client <strong>{{ client.name }}</strong>
+    sur une période de {{ period.days }} jours. {{ metrics.scans }} scan(s) ont été menés,
+    aboutissant à <strong>{{ metrics.findings_total }} découvertes</strong>
+    ({{ metrics.easm_findings }} EASM / {{ metrics.drps_findings }} DRPS) et
+    <strong>{{ metrics.iocs }} indicateurs de compromission (IoC)</strong> exportables vers MISP.
+  </p>
+
+  <div class="summary-grid">
+    <div class="stat"><div class="num">{{ metrics.findings_total }}</div><div class="lbl">Découvertes</div></div>
+    <div class="stat"><div class="num">{{ metrics.easm_findings }}</div><div class="lbl">EASM</div></div>
+    <div class="stat"><div class="num">{{ metrics.drps_findings }}</div><div class="lbl">DRPS</div></div>
+    <div class="stat"><div class="num">{{ metrics.iocs }}</div><div class="lbl">IoCs</div></div>
+  </div>
+
+  <h3>Répartition par sévérité</h3>
+  <div class="sev-grid">
+    {% for s in severity_order %}
+    <div class="sev" style="background: {{ severity_colors[s] }};">
+      <div class="num">{{ metrics.by_severity[s] }}</div>
+      <div class="lbl">{{ s }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ==== Périmètre ==== -->
+<section>
+  <h2>Périmètre couvert</h2>
+  {% if scopes %}
+  <div class="scope-list">
+    {% for s in scopes %}
+    <div class="scope-item"><span class="scope-kind">[{{ s.kind }}]</span>{{ s.value }}{% if s.note %} <span class="desc">— {{ s.note }}</span>{% endif %}</div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="desc">Aucun élément de périmètre défini.</p>
+  {% endif %}
+</section>
+
+<!-- ==== Scans ==== -->
+<section>
+  <h2>Scans exécutés</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Type</th><th>Statut</th><th>Démarré</th><th>Terminé</th><th>Résumé</th></tr></thead>
+    <tbody>
+    {% for s in scans %}
+      <tr>
+        <td>{{ s.id }}</td>
+        <td>{{ s.kind }}</td>
+        <td>
+          {% if s.status == 'completed' %}<span class="badge-ok">OK</span>
+          {% elif s.status in ['failed','partial'] %}<span class="badge-fail">{{ s.status }}</span>
+          {% else %}<span class="badge-running">{{ s.status }}</span>{% endif %}
+        </td>
+        <td>{{ s.started }}</td>
+        <td>{{ s.completed }}</td>
+        <td class="desc">{{ s.summary | tojson }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if include_easm and top_vulns %}
+<section class="page-break">
+  <h2>Top vulnérabilités EASM</h2>
+  <table>
+    <thead><tr><th>Sévérité</th><th>Titre</th><th>Asset</th><th>Source</th><th>Vu</th></tr></thead>
+    <tbody>
+    {% for v in top_vulns %}
+      <tr>
+        <td><span class="pill" style="background: {{ v.color }};">{{ v.severity }}</span></td>
+        <td><strong>{{ v.title }}</strong>{% if v.description %}<br><span class="desc">{{ v.description }}</span>{% endif %}</td>
+        <td><code>{{ v.asset }}</code></td>
+        <td>{{ v.source }}</td>
+        <td>{{ v.last_seen }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if include_drps and top_leaks %}
+<section class="page-break">
+  <h2>Empreinte numérique &amp; fuites (DRPS)</h2>
+  <table>
+    <thead><tr><th>Sévérité</th><th>Titre</th><th>Asset</th><th>Source</th><th>Vu</th></tr></thead>
+    <tbody>
+    {% for l in top_leaks %}
+      <tr>
+        <td><span class="pill" style="background: {{ l.color }};">{{ l.severity }}</span></td>
+        <td><strong>{{ l.title }}</strong>{% if l.description %}<br><span class="desc">{{ l.description }}</span>{% endif %}</td>
+        <td><code>{{ l.asset }}</code></td>
+        <td>{{ l.source }}</td>
+        <td>{{ l.last_seen }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<!-- ==== Distribution par type ==== -->
+<section>
+  <h2>Distribution par type de découverte</h2>
+  <table>
+    <thead><tr><th>Type</th><th>Nombre</th></tr></thead>
+    <tbody>
+    {% for k, v in metrics.by_kind.items() %}
+      <tr><td>{{ k }}</td><td>{{ v }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if iocs %}
+<section class="page-break">
+  <h2>Annexe : IoCs ({{ metrics.iocs }} total{% if iocs|length < metrics.iocs %}, {{ iocs|length }} affichés{% endif %})</h2>
+  <table class="ioc-table">
+    <thead><tr><th>Type</th><th>Valeur</th><th>Origine</th><th>Asset</th></tr></thead>
+    <tbody>
+    {% for i in iocs %}
+      <tr><td>{{ i.type }}</td><td>{{ i.value }}</td><td>{{ i.kind }}</td><td>{{ i.asset }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<div class="footer-note">
+  {{ brand }} — Rapport TLP:AMBER — Reproduction interdite hors cadre du client.
+</div>
+
+</body>
+</html>
