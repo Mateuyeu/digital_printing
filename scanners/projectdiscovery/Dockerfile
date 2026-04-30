@@ -3,7 +3,7 @@
 # Contient: httpx, nuclei, naabu, katana, cvemap, subfinder, dnsx
 # Base debian (et non alpine) car certaines deps PD ont des soucis avec musl.
 # =============================================================================
-FROM golang:1.24-bookworm AS builder
+FROM golang:1.25-bookworm AS builder
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -13,8 +13,11 @@ RUN apt-get update \
         ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
+# GOTOOLCHAIN=auto : si un module exige Go > 1.25, Go telecharge la toolchain
+# requise automatiquement (evite de devoir bumper l'image a chaque release PD).
 ENV GOFLAGS="-buildvcs=false" \
-    CGO_ENABLED=1
+    CGO_ENABLED=1 \
+    GOTOOLCHAIN=auto
 
 # Chaque install en couche separee : meilleur cache et diagnostic clair en cas
 # d'echec d'un seul outil.
