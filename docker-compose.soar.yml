@@ -36,11 +36,11 @@ services:
     networks:
       - dp_soar
     healthcheck:
-      test: ["CMD-SHELL", "nodetool status | grep -E '^UN'"]
+      test: ["CMD-SHELL", "nodetool status | grep -E '^UN' || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
+      timeout: 15s
+      retries: 30
+      start_period: 180s
 
   # ---------------------------------------------------------------------------
   # Elasticsearch (Cortex + TheHive index)
@@ -68,7 +68,8 @@ services:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 10
+      retries: 20
+      start_period: 90s
 
   # ---------------------------------------------------------------------------
   # TheHive 5 (case management, alertes EASM/DRPS)
@@ -113,8 +114,8 @@ services:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9000/api/v1/status || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 10
-      start_period: 120s
+      retries: 20
+      start_period: 240s
 
   # ---------------------------------------------------------------------------
   # Cortex (analyzers + responders)
@@ -215,5 +216,5 @@ services:
       test: ["CMD-SHELL", "curl -kfsS https://localhost/users/login || exit 1"]
       interval: 60s
       timeout: 15s
-      retries: 10
-      start_period: 180s
+      retries: 20
+      start_period: 300s
